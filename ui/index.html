@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AzurePilot — Azure AI Monitoring Copilot</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --azure-blue: #0078d4;
+      --azure-dark: #005a9e;
+      --bg: #f3f4f6;
+      --card: #ffffff;
+      --text: #1a1a1a;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+      --critical: #dc2626;
+      --high: #ea580c;
+      --medium: #d97706;
+      --low: #16a34a;
+      --none: #6b7280;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+           background: var(--bg); color: var(--text); font-size: 14px; }
+
+    /* ---- Header ---- */
+    header {
+      background: var(--azure-blue);
+      color: white;
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 2px 4px rgba(0,0,0,.15);
+    }
+    header h1 { font-size: 20px; font-weight: 700; }
+    header .subtitle { font-size: 13px; opacity: .85; }
+    header .mode-badge {
+      margin-left: auto;
+      background: rgba(255,255,255,.2);
+      border-radius: 20px;
+      padding: 3px 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    header .refresh-btn {
+      background: white;
+      color: var(--azure-blue);
+      border: none;
+      border-radius: 6px;
+      padding: 6px 14px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 13px;
+      transition: opacity .15s;
+    }
+    header .refresh-btn:hover { opacity: .85; }
+
+    /* ---- Layout ---- */
+    main { max-width: 1280px; margin: 0 auto; padding: 24px; }
+
+    /* ---- KPI Strip ---- */
+    .kpi-strip {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .kpi-card {
+      background: var(--card);
+      border-radius: 10px;
+      padding: 18px 20px;
+      border: 1px solid var(--border);
+      box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    }
+    .kpi-card .value {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--azure-blue);
+      line-height: 1;
+    }
+    .kpi-card .label { font-size: 12px; color: var(--muted); margin-top: 6px; }
+    .kpi-card.critical .value { color: var(--critical); }
+    .kpi-card.cost .value { color: #7c3aed; }
+
+    /* ---- Two-column layout ---- */
+    .content-grid {
+      display: grid;
+      grid-template-columns: 1fr 1.6fr;
+      gap: 20px;
+      align-items: start;
+    }
+    @media (max-width: 900px) { .content-grid { grid-template-columns: 1fr; } }
+
+    /* ---- Panel ---- */
+    .panel {
+      background: var(--card);
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      box-shadow: 0 1px 3px rgba(0,0,0,.06);
+      overflow: hidden;
+    }
+    .panel-header {
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      font-weight: 600;
+      font-size: 15px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .panel-body { padding: 0; }
+
+    /* ---- Resource list ---- */
+    .resource-item {
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+      transition: background .1s;
+    }
+    .resource-item:last-child { border-bottom: none; }
+    .resource-item:hover { background: #f9fafb; }
+    .resource-item.selected { background: #eff6ff; border-left: 3px solid var(--azure-blue); }
+
+    .risk-badge {
+      min-width: 44px;
+      text-align: center;
+      border-radius: 20px;
+      padding: 3px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      color: white;
+    }
+    .resource-info { flex: 1; min-width: 0; }
+    .resource-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .resource-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+    .health-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    /* ---- Severity colors ---- */
+    .sev-critical { background: var(--critical); }
+    .sev-high     { background: var(--high); }
+    .sev-medium   { background: var(--medium); }
+    .sev-low      { background: var(--low); }
+    .sev-none, .sev-unknown { background: var(--none); }
+
+    .health-Available   { background: #16a34a; }
+    .health-Degraded    { background: var(--medium); }
+    .health-Unavailable { background: var(--critical); }
+    .health-Unknown     { background: var(--muted); }
+
+    /* ---- Incident detail ---- */
+    .detail-panel { display: none; }
+    .detail-panel.visible { display: block; }
+
+    .detail-section {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .detail-section:last-child { border-bottom: none; }
+    .detail-section h3 {
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+    .detail-section p { line-height: 1.6; color: var(--text); }
+
+    .action-text {
+      white-space: pre-line;
+      line-height: 1.7;
+    }
+
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 10px;
+    }
+    .metric-chip {
+      background: #f9fafb;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+    .metric-chip .mn { font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+    .metric-chip .mv { font-size: 18px; font-weight: 700; color: var(--azure-blue); }
+    .metric-chip .mb { font-size: 11px; color: var(--muted); }
+    .metric-chip .risk-bar {
+      height: 4px;
+      background: #e5e7eb;
+      border-radius: 2px;
+      margin-top: 6px;
+      overflow: hidden;
+    }
+    .metric-chip .risk-fill { height: 100%; border-radius: 2px; }
+
+    .cost-box {
+      background: #faf5ff;
+      border: 1px solid #e9d5ff;
+      border-radius: 8px;
+      padding: 14px 16px;
+    }
+    .cost-box .amount { font-size: 24px; font-weight: 700; color: #7c3aed; }
+    .cost-box .desc { font-size: 12px; color: var(--muted); margin-top: 4px; line-height: 1.5; }
+
+    .severity-tag {
+      display: inline-block;
+      border-radius: 4px;
+      padding: 2px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      color: white;
+    }
+
+    /* ---- Empty / loading state ---- */
+    .empty-state { text-align: center; padding: 48px 20px; color: var(--muted); }
+    .loading { text-align: center; padding: 32px; color: var(--muted); }
+    .spinner {
+      display: inline-block;
+      width: 20px; height: 20px;
+      border: 3px solid var(--border);
+      border-top-color: var(--azure-blue);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      margin-bottom: 8px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .placeholder-panel {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--muted);
+    }
+    .placeholder-panel svg { margin-bottom: 12px; opacity: .35; }
+
+    .toast {
+      position: fixed;
+      bottom: 24px; right: 24px;
+      background: #1f2937;
+      color: white;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 13px;
+      opacity: 0;
+      transition: opacity .3s;
+      pointer-events: none;
+      z-index: 999;
+    }
+    .toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+
+<header>
+  <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+    <circle cx="14" cy="14" r="14" fill="white" opacity=".15"/>
+    <path d="M14 6l6 4v8l-6 4-6-4V10l6-4z" fill="white"/>
+    <path d="M14 10l3 2v4l-3 2-3-2v-4l3-2z" fill="#0078d4"/>
+  </svg>
+  <div>
+    <h1>AzurePilot</h1>
+    <div class="subtitle">AI-Powered Azure Monitoring Copilot</div>
+  </div>
+  <span class="mode-badge" id="modeBadge">DEMO</span>
+  <button class="refresh-btn" onclick="refreshData()">⟳ Refresh</button>
+</header>
+
+<main>
+  <!-- KPI Strip -->
+  <div class="kpi-strip" id="kpiStrip">
+    <div class="kpi-card">
+      <div class="value" id="kpiResources">—</div>
+      <div class="label">Resources Monitored</div>
+    </div>
+    <div class="kpi-card critical">
+      <div class="value" id="kpiIncidents">—</div>
+      <div class="label">Active Incidents</div>
+    </div>
+    <div class="kpi-card critical">
+      <div class="value" id="kpiCritical">—</div>
+      <div class="label">Critical Severity</div>
+    </div>
+    <div class="kpi-card">
+      <div class="value" id="kpiAvgRisk">—</div>
+      <div class="label">Avg Risk Score</div>
+    </div>
+    <div class="kpi-card cost">
+      <div class="value" id="kpiCost">—</div>
+      <div class="label">Est. Cost Impact</div>
+    </div>
+  </div>
+
+  <!-- Content -->
+  <div class="content-grid">
+    <!-- Left: Resource list -->
+    <div class="panel">
+      <div class="panel-header">
+        🔍 Top Risky Resources
+        <span style="font-size:12px;color:var(--muted);font-weight:400" id="resourceCount"></span>
+      </div>
+      <div class="panel-body" id="resourceList">
+        <div class="loading"><div class="spinner"></div><br>Loading resources…</div>
+      </div>
+    </div>
+
+    <!-- Right: Incident detail -->
+    <div class="panel" id="detailPanel">
+      <div class="placeholder-panel">
+        <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+          <circle cx="24" cy="24" r="22" stroke="#9ca3af" stroke-width="2"/>
+          <path d="M24 14v14M24 34v2" stroke="#9ca3af" stroke-width="2.5" stroke-linecap="round"/>
+        </svg>
+        <div style="font-size:16px;font-weight:600;margin-bottom:6px">Select a resource</div>
+        <div style="font-size:13px">Click any resource on the left to view incident details,<br>AI root cause analysis, and recommended actions.</div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ? 'http://localhost:8000'
+  : '';   // same-origin in production
+
+let incidents = [];
+let selectedIncidentId = null;
+
+// ---- Severity helpers ----
+function sevColor(sev) {
+  return { critical: '#dc2626', high: '#ea580c', medium: '#d97706', low: '#16a34a', none: '#6b7280' }[sev] || '#6b7280';
+}
+function riskColor(score) {
+  if (score >= 75) return '#dc2626';
+  if (score >= 55) return '#ea580c';
+  if (score >= 30) return '#d97706';
+  if (score >= 10) return '#16a34a';
+  return '#6b7280';
+}
+
+// ---- Fetch KPIs ----
+async function loadKPIs() {
+  try {
+    const res = await fetch(`${API}/kpis`);
+    const kpi = await res.json();
+    document.getElementById('kpiResources').textContent = kpi.total_resources;
+    document.getElementById('kpiIncidents').textContent = kpi.total_incidents;
+    document.getElementById('kpiCritical').textContent = kpi.critical_incidents;
+    document.getElementById('kpiAvgRisk').textContent = kpi.avg_risk_score.toFixed(1);
+    document.getElementById('kpiCost').textContent = `$${kpi.total_estimated_cost_impact_usd.toFixed(2)}`;
+    document.getElementById('modeBadge').textContent = kpi.mode.toUpperCase();
+  } catch (e) {
+    console.error('KPI fetch failed', e);
+  }
+}
+
+// ---- Fetch incidents (used as resource list source) ----
+async function loadIncidents() {
+  try {
+    const res = await fetch(`${API}/incidents`);
+    incidents = await res.json();
+    renderResourceList(incidents);
+  } catch (e) {
+    document.getElementById('resourceList').innerHTML =
+      `<div class="empty-state">❌ Could not connect to API at ${API}.<br><small>Make sure the server is running: <code>python -m uvicorn api.main:app</code></small></div>`;
+  }
+}
+
+// ---- Render resource list ----
+function renderResourceList(incidentList) {
+  const el = document.getElementById('resourceList');
+  document.getElementById('resourceCount').textContent = `${incidentList.length} incidents`;
+
+  if (!incidentList.length) {
+    el.innerHTML = '<div class="empty-state">✅ No incidents detected — all resources healthy!</div>';
+    return;
+  }
+
+  el.innerHTML = incidentList.map(inc => `
+    <div class="resource-item ${inc.id === selectedIncidentId ? 'selected' : ''}"
+         onclick="selectIncident('${inc.id}')"
+         id="item-${inc.id}">
+      <span class="risk-badge" style="background:${riskColor(inc.risk_score)}">${Math.round(inc.risk_score)}</span>
+      <div class="resource-info">
+        <div class="resource-name">${inc.resource_name}</div>
+        <div class="resource-meta">${friendlyType(inc.resource_type)} · ${inc.resource_group}</div>
+      </div>
+      <span class="health-dot health-${inc.health_status}"></span>
+    </div>
+  `).join('');
+}
+
+// ---- Select incident ----
+async function selectIncident(id) {
+  selectedIncidentId = id;
+  // Update selected state in list
+  document.querySelectorAll('.resource-item').forEach(el => el.classList.remove('selected'));
+  const item = document.getElementById(`item-${id}`);
+  if (item) item.classList.add('selected');
+
+  const panel = document.getElementById('detailPanel');
+  panel.innerHTML = `<div class="loading"><div class="spinner"></div><br>Loading incident detail…</div>`;
+
+  try {
+    const res = await fetch(`${API}/incidents/${id}`);
+    if (!res.ok) throw new Error(res.statusText);
+    const inc = await res.json();
+    renderDetail(inc, panel);
+  } catch (e) {
+    panel.innerHTML = `<div class="empty-state">Failed to load incident: ${e.message}</div>`;
+  }
+}
+
+// ---- Render detail ----
+function renderDetail(inc, panel) {
+  const metricsHtml = (inc.contributing_metrics || []).map(m => `
+    <div class="metric-chip">
+      <div class="mn">${m.metric_name}</div>
+      <div class="mv">${formatValue(m.current_value, m.unit)}</div>
+      <div class="mb">baseline: ${formatValue(m.baseline_mean, m.unit)} · z=${m.z_score.toFixed(1)}</div>
+      <div class="risk-bar"><div class="risk-fill" style="width:${m.risk_contribution}%;background:${riskColor(m.risk_contribution)}"></div></div>
+    </div>
+  `).join('');
+
+  panel.innerHTML = `
+    <div class="panel-header" style="gap:10px">
+      <div>
+        <span style="font-size:17px;font-weight:700">${inc.resource_name}</span>
+        <span style="margin-left:10px;font-size:13px;color:var(--muted)">${friendlyType(inc.resource_type)}</span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span class="severity-tag" style="background:${sevColor(inc.severity)}">${inc.severity.toUpperCase()}</span>
+        <span style="font-size:22px;font-weight:800;color:${riskColor(inc.risk_score)}">${Math.round(inc.risk_score)}<small style="font-size:12px;font-weight:400">/100</small></span>
+      </div>
+    </div>
+
+    <div class="detail-section">
+      <h3>📋 Summary</h3>
+      <p>${inc.summary || '<em>No summary available</em>'}</p>
+      <div style="margin-top:8px;font-size:12px;color:var(--muted)">
+        ${inc.resource_group} · ${inc.location} · Health: <strong>${inc.health_status}</strong>
+        ${inc.is_platform_issue ? '· <span style="color:var(--high)">⚠ Platform Issue</span>' : ''}
+        · Detected: ${new Date(inc.detected_at).toLocaleString()}
+      </div>
+    </div>
+
+    <div class="detail-section">
+      <h3>📊 Contributing Metrics (${inc.anomaly_count} anomalies)</h3>
+      ${metricsHtml || '<p style="color:var(--muted)">No metric anomalies detected.</p>'}
+    </div>
+
+    <div class="detail-section">
+      <h3>🔍 Root Cause Hypothesis</h3>
+      <p>${inc.root_cause_hypothesis || '<em>Not available</em>'}</p>
+    </div>
+
+    <div class="detail-section">
+      <h3>⚡ Recommended Actions</h3>
+      <p class="action-text">${inc.recommended_action || '<em>Not available</em>'}</p>
+    </div>
+
+    ${inc.health_reason ? `
+    <div class="detail-section">
+      <h3>🏥 Azure Resource Health</h3>
+      <p>${inc.health_reason}</p>
+    </div>` : ''}
+
+    <div class="detail-section">
+      <h3>💰 Estimated Cost Impact</h3>
+      <div class="cost-box">
+        <div class="amount">$${inc.estimated_cost_impact_usd.toFixed(2)}</div>
+        <div class="desc">${inc.cost_impact_description}</div>
+      </div>
+    </div>
+  `;
+}
+
+// ---- Refresh ----
+async function refreshData() {
+  showToast('Refreshing data…');
+  try {
+    await fetch(`${API}/refresh`, { method: 'POST' });
+    await Promise.all([loadKPIs(), loadIncidents()]);
+    if (selectedIncidentId) await selectIncident(selectedIncidentId);
+    showToast('✅ Data refreshed');
+  } catch (e) {
+    showToast('❌ Refresh failed: ' + e.message);
+  }
+}
+
+// ---- Helpers ----
+function friendlyType(t) {
+  if (!t) return '';
+  if (t.includes('virtualMachines')) return '🖥 Virtual Machine';
+  if (t.includes('sites')) return '🌐 App Service';
+  if (t.includes('storageAccounts')) return '🗄 Storage Account';
+  return t.split('/').pop();
+}
+
+function formatValue(v, unit) {
+  if (!unit) return v.toFixed(2);
+  if (unit === 'Bytes') {
+    if (v >= 1e9) return (v / 1e9).toFixed(1) + ' GB';
+    if (v >= 1e6) return (v / 1e6).toFixed(1) + ' MB';
+    if (v >= 1e3) return (v / 1e3).toFixed(1) + ' KB';
+    return v.toFixed(0) + ' B';
+  }
+  if (unit === 'Percent') return v.toFixed(1) + '%';
+  if (unit === 'MilliSeconds') return v.toFixed(0) + 'ms';
+  if (unit === 'Seconds') return v.toFixed(2) + 's';
+  return v.toFixed(2) + ' ' + unit;
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// ---- Init ----
+(async () => {
+  await Promise.all([loadKPIs(), loadIncidents()]);
+})();
+</script>
+</body>
+</html>
