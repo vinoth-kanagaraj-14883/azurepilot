@@ -55,6 +55,44 @@ docker-compose up --build
 
 ---
 
+## Run Against a Real Azure Subscription
+
+> Demo mode is always the default (zero credentials needed).  
+> Follow these steps only when you want live data from your own Azure subscription.
+
+**Required RBAC roles** — assign to the identity running AzurePilot:
+
+| Role | Scope | Purpose |
+|---|---|---|
+| `Reader` | Subscription | List resources via Resource Manager |
+| `Monitoring Reader` | Subscription | Read Azure Monitor metrics |
+| `Resource Health Reader` | Subscription | Read availability statuses |
+
+See [docs/setup.md](docs/setup.md) for full detail: service principal creation, managed identity setup, and troubleshooting.
+
+```bash
+# 1. Authenticate (simplest option for local testing)
+az login
+az account set --subscription <your-subscription-id>
+
+# 2. Configure .env for live mode
+cp .env.example .env
+# then edit .env and set:
+#   AZUREPILOT_MODE=live
+#   AZURE_SUBSCRIPTION_ID=<your-subscription-id>
+#   AZURE_RESOURCE_GROUP=<optional — scope to one RG, or leave blank for whole subscription>
+
+# 3. (Recommended) Verify your credentials and permissions before running the full app
+python scripts/verify_azure_connection.py
+
+# 4. Run exactly like demo mode
+python -m uvicorn api.main:app --port 8000
+python -m http.server 3000 --directory ui
+# Visit: http://localhost:3000
+```
+
+---
+
 ## Architecture
 
 ```mermaid

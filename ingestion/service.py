@@ -64,11 +64,9 @@ class IngestionService:
         Obtain a bearer token via DefaultAzureCredential.
         Supports: Managed Identity, Service Principal env vars, az CLI login.
         """
-        from azure.identity import DefaultAzureCredential  # type: ignore[import]
+        from ingestion.auth import get_credential_token
 
-        credential = DefaultAzureCredential()
-        token = credential.get_token("https://management.azure.com/.default")
-        return token.token
+        return get_credential_token()
 
     def _live_get_resources(self) -> list[AzureResource]:
         from ingestion.resource_discovery import ResourceDiscovery

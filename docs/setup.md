@@ -1,5 +1,8 @@
 # AzurePilot — Setup Guide
 
+> **New here?** See the [Run Against a Real Azure Subscription](../README.md#run-against-a-real-azure-subscription)
+> section in the README for the condensed quick-start before diving into the full detail below.
+
 ## Quick Start (Demo Mode — no Azure account required)
 
 Everything works out of the box in demo mode using synthetic data.
@@ -110,6 +113,32 @@ AZURE_SUBSCRIPTION_ID=<your-subscription-id>
 ### Option 3: Managed Identity (Azure VM / App Service / Container)
 
 No configuration needed — `DefaultAzureCredential` picks up the managed identity automatically. Just ensure the identity has the required roles above.
+
+---
+
+### Validate your setup
+
+Before running the full app in live mode, run the included verification script.
+It checks auth, resource discovery, resource health reads, and metrics reads in
+sequence and prints a clear pass/fail summary with actionable hints:
+
+```bash
+python scripts/verify_azure_connection.py
+```
+
+The script exits with code `0` if all steps pass, `1` if any step fails — making
+it suitable for use in CI or scripting as well.
+
+---
+
+### Subscription scope
+
+AzurePilot currently targets a **single Azure subscription**, identified by
+`AZURE_SUBSCRIPTION_ID`.  You can optionally narrow the scope to a single resource
+group via `AZURE_RESOURCE_GROUP` (leave it blank to monitor the whole subscription).
+
+Multi-subscription aggregation is a roadmap item (tracked in the README) and is
+not yet implemented.
 
 ---
 
