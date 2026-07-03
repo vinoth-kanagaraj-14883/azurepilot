@@ -123,7 +123,7 @@ def main() -> int:
 
         counts = {rt: 0 for rt in ResourceType}
         for r in resources:
-            counts[r.resource_type] = counts.get(r.resource_type, 0) + 1
+            counts[r.resource_type] += 1
 
         total = len(resources)
         ok = total > 0

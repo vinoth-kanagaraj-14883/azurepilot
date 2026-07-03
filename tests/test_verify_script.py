@@ -7,9 +7,10 @@ calls are inherently untestable in CI without credentials and are not covered he
 """
 from __future__ import annotations
 
-import importlib
+import importlib.util
 import os
 import sys
+from datetime import datetime, timezone
 from io import StringIO
 from unittest.mock import MagicMock, patch
 
@@ -28,8 +29,6 @@ def _import_verify():
     if script_path not in sys.path:
         sys.path.insert(0, script_path)
 
-    import importlib.util
-
     spec = importlib.util.spec_from_file_location(
         "verify_azure_connection",
         os.path.join(script_path, "verify_azure_connection.py"),
@@ -40,6 +39,19 @@ def _import_verify():
 
 
 # ---------------------------------------------------------------------------
+# Shared fixture — reset cached settings before/after each test
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(autouse=True)
+def reset_settings():
+    """Reset the cached Settings singleton before and after each test."""
+    import ingestion.config as cfg
+    cfg._settings = None
+    yield
+    cfg._settings = None
+
+
+# ---------------------------------------------------------------------------
 # Config validation tests
 # ---------------------------------------------------------------------------
 
@@ -47,53 +59,22 @@ def _import_verify():
 class TestConfigValidation:
     """Test early-exit behaviour when config is missing/wrong."""
 
-    def _run_main(self, env_overrides: dict) -> tuple[int, str]:
-        """Run main() with patched env vars and capture stdout."""
-        base_env = {
-            "AZUREPILOT_MODE": "live",
-            "AZURE_SUBSCRIPTION_ID": "sub-123",
-        }
-        base_env.update(env_overrides)
-
-        # Reset cached settings before each run
-        import ingestion.config as cfg
-
-        cfg._settings = None
-
-        captured = StringIO()
-        with patch.dict(os.environ, base_env, clear=False):
-            # Also reset settings inside the patched env
-            cfg._settings = None
-            module = _import_verify()
-            with patch("sys.stdout", captured):
-                exit_code = module.main()
-
-        cfg._settings = None
-        return exit_code, captured.getvalue()
-
     def test_exits_nonzero_when_mode_is_demo(self):
         """main() exits with code 1 when AZUREPILOT_MODE=demo."""
-        import ingestion.config as cfg
-
-        cfg._settings = None
         captured = StringIO()
 
         with patch.dict(os.environ, {"AZUREPILOT_MODE": "demo"}, clear=False):
+            import ingestion.config as cfg
             cfg._settings = None
             module = _import_verify()
             with patch("sys.stdout", captured):
                 exit_code = module.main()
 
-        cfg._settings = None
         assert exit_code == 1
         assert "demo" in captured.getvalue().lower()
 
     def test_exits_nonzero_when_subscription_id_missing(self):
         """main() exits with code 1 when AZURE_SUBSCRIPTION_ID is not set."""
-        import ingestion.config as cfg
-
-        cfg._settings = None
-
         env = {"AZUREPILOT_MODE": "live"}
         # Remove AZURE_SUBSCRIPTION_ID from environment if present
         clean_env = {k: v for k, v in os.environ.items() if k != "AZURE_SUBSCRIPTION_ID"}
@@ -101,24 +82,21 @@ class TestConfigValidation:
 
         captured = StringIO()
         with patch.dict(os.environ, clean_env, clear=True):
+            import ingestion.config as cfg
             cfg._settings = None
             module = _import_verify()
             with patch("sys.stdout", captured):
                 exit_code = module.main()
 
-        cfg._settings = None
         assert exit_code == 1
         assert "AZURE_SUBSCRIPTION_ID" in captured.getvalue()
 
     def test_exits_nonzero_on_auth_failure(self):
         """main() exits with code 1 when DefaultAzureCredential raises."""
-        import ingestion.config as cfg
-
-        cfg._settings = None
-
         captured = StringIO()
         env = {"AZUREPILOT_MODE": "live", "AZURE_SUBSCRIPTION_ID": "sub-456"}
         with patch.dict(os.environ, env, clear=False):
+            import ingestion.config as cfg
             cfg._settings = None
             module = _import_verify()
 
@@ -129,20 +107,13 @@ class TestConfigValidation:
                 with patch("sys.stdout", captured):
                     exit_code = module.main()
 
-        cfg._settings = None
         assert exit_code == 1
         output = captured.getvalue()
         assert "✗" in output or "FAIL" in output.upper() or "failed" in output.lower()
 
     def test_passes_when_resources_found_and_clients_succeed(self):
         """main() returns 0 when auth, discovery, health, and metrics all succeed."""
-        import ingestion.config as cfg
-
-        cfg._settings = None
-
-        # Build a fake AzureResource
         from ingestion.models import AzureResource, HealthEvent, HealthStatus, MetricSeries, ResourceType
-        from datetime import datetime, timezone
 
         fake_resource = AzureResource(
             id="/subscriptions/sub-123/resourceGroups/rg/providers/Microsoft.Compute/virtualMachines/vm1",
@@ -152,12 +123,13 @@ class TestConfigValidation:
             location="eastus",
             subscription_id="sub-123",
         )
+        now = datetime.now(tz=timezone.utc)
         fake_health = HealthEvent(
             resource_id=fake_resource.id,
             status=HealthStatus.AVAILABLE,
             reason="",
-            occurred_time=datetime.now(tz=timezone.utc),
-            reported_time=datetime.now(tz=timezone.utc),
+            occurred_time=now,
+            reported_time=now,
         )
         fake_series: list[MetricSeries] = []
 
@@ -179,6 +151,7 @@ class TestConfigValidation:
         mock_metrics_client.get_metrics_for_resource_type.return_value = fake_series
 
         with patch.dict(os.environ, env, clear=False):
+            import ingestion.config as cfg
             cfg._settings = None
             module = _import_verify()
 
@@ -191,7 +164,6 @@ class TestConfigValidation:
             ):
                 exit_code = module.main()
 
-        cfg._settings = None
         assert exit_code == 0
         output = captured.getvalue()
         assert "✓" in output
@@ -222,3 +194,4 @@ class TestPrintStep:
         with patch("sys.stdout", captured):
             module._print_step("OK", ok=True, hint="should not appear")
         assert "should not appear" not in captured.getvalue()
+
