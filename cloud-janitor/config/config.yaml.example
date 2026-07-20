@@ -1,0 +1,6 @@
+subscriptions:
+  - "00000000-0000-0000-0000-000000000001"
+rulesConfig: "config/rules.json"
+outputDir: "output/"
+lookbackDays: 7
+logLevel: "info"
