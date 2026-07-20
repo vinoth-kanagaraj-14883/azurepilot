@@ -92,11 +92,11 @@ func LoadConfig(path string) (*RuleConfig, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read rules config: %w", err)
 	}
+	// Start with defaults so any omitted JSON fields retain their default values.
 	cfg := defaultConfig()
 	if err := json.Unmarshal(payload, &cfg); err != nil {
 		return nil, fmt.Errorf("parse rules config: %w", err)
 	}
-	mergeConfig(&cfg, cfg)
 	return &cfg, nil
 }
 
