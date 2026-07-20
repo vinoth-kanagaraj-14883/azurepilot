@@ -1,0 +1,17 @@
+# Go build artifacts
+/cloud-janitor-bin
+*.exe
+
+# Output reports
+output/*.json
+
+# Dashboard
+dashboard/node_modules/
+dashboard/build/
+dashboard/.env.local
+dashboard/.env.development.local
+dashboard/.env.test.local
+dashboard/.env.production.local
+dashboard/npm-debug.log*
+dashboard/yarn-debug.log*
+dashboard/yarn-error.log*

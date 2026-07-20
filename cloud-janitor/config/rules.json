@@ -1,0 +1,13 @@
+{
+  "idleCpuThresholdPercent": 2.0,
+  "idleLookbackDays": 7,
+  "storageLookbackDays": 30,
+  "budgetThresholdPerResource": 1000.0,
+  "scoreExpired": 40,
+  "scoreIdle": 30,
+  "scoreNoOwner": 20,
+  "scoreNoTags": 10,
+  "scorePremiumSku": 15,
+  "scoreOverBudget": 25,
+  "premiumSkuKeywords": ["premium", "P1", "P2", "P3", "Standard_D", "Standard_E", "Standard_F", "Standard_G"]
+}
