@@ -49,7 +49,18 @@ func (p *AzureCostProvider) GetCost(ctx context.Context, subscriptionID string, 
 	resourceIDColumn := "ResourceId"
 	currencyColumn := "Currency"
 
-	definition := armcostmanagement.QueryDefinition{
+	definition := buildCostQueryDefinition(costColumn, resourceIDColumn, timeframe, queryType)
+
+	result, err := client.Usage(ctx, scope, definition, nil)
+	if err != nil {
+		return nil, fmt.Errorf("cost query: %w", err)
+	}
+
+	return extractCostsFromQueryResult(result.QueryResult, resourceGroup, period, resourceIDColumn, costColumn, currencyColumn)
+}
+
+func buildCostQueryDefinition(costColumn, resourceIDColumn string, timeframe armcostmanagement.TimeframeType, queryType armcostmanagement.ExportType) armcostmanagement.QueryDefinition {
+	return armcostmanagement.QueryDefinition{
 		Type:      &queryType,
 		Timeframe: &timeframe,
 		Dataset: &armcostmanagement.QueryDataset{
@@ -62,16 +73,12 @@ func (p *AzureCostProvider) GetCost(ctx context.Context, subscriptionID string, 
 			},
 			Grouping: []*armcostmanagement.QueryGrouping{
 				{Name: &resourceIDColumn, Type: ptr(armcostmanagement.QueryColumnTypeDimension)},
-				{Name: &currencyColumn, Type: ptr(armcostmanagement.QueryColumnTypeDimension)},
 			},
 		},
 	}
+}
 
-	result, err := client.Usage(ctx, scope, definition, nil)
-	if err != nil {
-		return nil, fmt.Errorf("cost query: %w", err)
-	}
-
+func extractCostsFromQueryResult(result armcostmanagement.QueryResult, resourceGroup, period, resourceIDColumn, costColumn, currencyColumn string) ([]ResourceCost, error) {
 	columnIndexes := map[string]int{}
 	for index, column := range result.Properties.Columns {
 		if column != nil && column.Name != nil {
@@ -79,8 +86,17 @@ func (p *AzureCostProvider) GetCost(ctx context.Context, subscriptionID string, 
 		}
 	}
 
-	resourceIdx := columnIndexes[strings.ToLower(resourceIDColumn)]
-	currencyIdx := columnIndexes[strings.ToLower(currencyColumn)]
+	resourceIdx, ok := columnIndexes[strings.ToLower(resourceIDColumn)]
+	if !ok {
+		return nil, fmt.Errorf("resource id column not found in result")
+	}
+	currencyIdx := -1
+	if idx, ok := columnIndexes[strings.ToLower(currencyColumn)]; ok {
+		currencyIdx = idx
+		// Some cost query responses expose billing currency under BillingCurrency instead of Currency.
+	} else if idx, ok := columnIndexes[strings.ToLower("BillingCurrency")]; ok {
+		currencyIdx = idx
+	}
 	costIdx := -1
 	for name, index := range columnIndexes {
 		if strings.Contains(name, strings.ToLower(costColumn)) || strings.Contains(name, "totalcost") {
