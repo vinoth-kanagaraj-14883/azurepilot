@@ -88,7 +88,7 @@ func extractCostsFromQueryResult(result armcostmanagement.QueryResult, resourceG
 
 	resourceIdx, ok := columnIndexes[strings.ToLower(resourceIDColumn)]
 	if !ok {
-		resourceIdx = -1
+		return nil, fmt.Errorf("resource id column not found in result")
 	}
 	currencyIdx := -1
 	if idx, ok := columnIndexes[strings.ToLower(currencyColumn)]; ok {

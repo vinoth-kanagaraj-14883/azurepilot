@@ -94,4 +94,21 @@ func TestExtractCostsFromQueryResult_CurrencyHandling(t *testing.T) {
 			t.Fatalf("expected empty currency when column missing, got %q", costs[0].Currency)
 		}
 	})
+
+	t.Run("resource id column absent", func(t *testing.T) {
+		result := armcostmanagement.QueryResult{
+			Properties: &armcostmanagement.QueryProperties{
+				Columns: []*armcostmanagement.QueryColumn{
+					{Name: ptr("PreTaxCost")},
+					{Name: ptr("Currency")},
+				},
+				Rows: [][]any{{12.5, "USD"}},
+			},
+		}
+
+		_, err := extractCostsFromQueryResult(result, "rg", "2026-07", "ResourceId", "PreTaxCost", "Currency")
+		if err == nil {
+			t.Fatal("expected error when resource id column is missing")
+		}
+	})
 }
