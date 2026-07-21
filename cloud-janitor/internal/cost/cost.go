@@ -93,6 +93,7 @@ func extractCostsFromQueryResult(result armcostmanagement.QueryResult, resourceG
 	currencyIdx := -1
 	if idx, ok := columnIndexes[strings.ToLower(currencyColumn)]; ok {
 		currencyIdx = idx
+		// Some cost query responses expose billing currency under BillingCurrency instead of Currency.
 	} else if idx, ok := columnIndexes[strings.ToLower("BillingCurrency")]; ok {
 		currencyIdx = idx
 	}
