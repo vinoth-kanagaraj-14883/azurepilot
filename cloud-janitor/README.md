@@ -242,6 +242,7 @@ Run it on a schedule via cron, a GitHub Actions workflow, or an Azure Function/C
 | `AuthorizationFailed` | Role assignment hasn't propagated yet, or wrong scope | Wait a few minutes; confirm scope is the subscription, not a resource group |
 | `no subscriptions found` | Wrong/no `--subscriptions` value, or account has no access | Re-run `az account list` and confirm the subscription ID |
 | Empty/zero cost figures | Cost Management Reader role missing | Re-check Step 2 role assignment |
+| `Invalid query definition: Invalid dataset grouping: 'Currency'` | Running an older janitor build | Pull latest code and rebuild `janitor` — currency is returned automatically and is no longer sent as a grouping |
 | `DefaultAzureCredential: failed to acquire token` | No valid credential source available | Run `az login`, or set the Service Principal env vars from Step 3 |
 | AKS pods/containers show no idle signal | Expected — Monitor Metrics alone can't see pod-level data | See "AKS Metrics Note" above; Container Insights integration is a future enhancement |
 
